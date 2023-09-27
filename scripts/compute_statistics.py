@@ -163,14 +163,24 @@ if __name__ == '__main__':
         logging.info(f"Min of {key}: {np.min(all_results[key])}")
         logging.info(f"Max of {key}: {np.max(all_results[key])}")
 
-     # make word cloud aggregating the words in  all_results['ocr_lines']
-    print(all_results['ocr_lines'])
+    # make word cloud aggregating the words in  all_results['ocr_lines']
+    #print(all_results['ocr_lines'])
     all_ocr_lines = []
     for ocr_lines in all_results['ocr_lines']:
         all_ocr_lines += ocr_lines
-    wordcloud = WordCloud(width=800, height=400).generate(' '.join(all_ocr_lines))
+    all_strings = ' '.join(all_ocr_lines)
+    all_words = all_strings.split(' ')
+    #remove leading and trailing spaces
+    all_words = [word.strip() for word in all_words]
+    #filter out every word that is of length 1
+    all_words_filtered = [word for word in all_words if len(word) > 1]
+    wordcloud = WordCloud(width=800, height=400).generate(' '.join(all_words_filtered))
     plt.figure(figsize=(20,10))
     plt.imshow(wordcloud, interpolation='bilinear')
     plt.axis("off")
     plt.savefig(os.path.join(args.logdir, 'wordcloud.png'))
     plt.close()
+    # save results to json
+    with open(os.path.join(args.logdir, 'results.json'), 'w') as f:
+        json.dump(all_results, f)
+    
