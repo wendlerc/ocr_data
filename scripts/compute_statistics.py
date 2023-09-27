@@ -21,6 +21,7 @@ def parse_arguments():
     parser.add_argument('--path', type=str, default='/p/fastdata/mmlaion/ocr/RenderedText/', help='path')
     parser.add_argument('--logdir', type=str, default='./log/', help='output path for logs and results')
     parser.add_argument('--type', type=str, default="tar", help='tar or parquet')
+    parser.add_argument('--save_dict', action='store_true', help='save result dict')
     return parser.parse_args()
 
 def bbox2str(bbox):
@@ -180,7 +181,12 @@ if __name__ == '__main__':
     plt.axis("off")
     plt.savefig(os.path.join(args.logdir, 'wordcloud.png'))
     plt.close()
-    # save results to json
-    with open(os.path.join(args.logdir, 'results.json'), 'w') as f:
-        json.dump(all_results, f)
+    # Extract words from the WordCloud object
+    words_in_wordcloud = list(wordcloud.words_.keys())
+    print(words_in_wordcloud)
+    all_results['words_in_wordcloud'] = words_in_wordcloud
+    all_results['words_in_wordcloud_freq'] = list(wordcloud.words_.values())
+    if args.save_dict:
+        with open(os.path.join(args.logdir, 'results.json'), 'w') as f:
+            json.dump(all_results, f)
     
