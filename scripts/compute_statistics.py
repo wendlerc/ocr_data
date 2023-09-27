@@ -10,6 +10,7 @@ from tqdm import tqdm
 from collections import defaultdict
 import logging
 from matplotlib import pyplot as plt
+from wordcloud import WordCloud
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process tar files in a directory')
@@ -59,8 +60,8 @@ def work_tar(tar_name):
         for idx, (image_name, image_data) in tqdm(enumerate(images.items())):
             img_ending = image_name.split('.')[-1]
             json_name = image_name.replace(img_ending, 'json')
-            logging.info('Processing image: ' + image_name)
-            logging.info('Processing json: ' + json_name)
+            logging.debug('Processing image: ' + image_name)
+            logging.debug('Processing json: ' + json_name)
             if json_name in json_files:
                 json_content = json_files[json_name]
                 if 'ocr_annotation' in json_content:
@@ -78,6 +79,7 @@ def work_tar(tar_name):
                     statistics['width'] += [json_content['width']]
                     if ocr_key is not None:
                         statistics['num_ocr_lines'] += [len(json_content[ocr_key]['text'])]
+                        statistics['ocr_lines'] += [json_content[ocr_key]['text']]
                         statistics['ocr_caption'] += [ocr_caption(json_content, ocr_key)]
                         statistics['len_ocr_caption'] += [len(statistics['ocr_caption'][-1])]
                     if 'caption' in json_content:
@@ -116,12 +118,11 @@ if __name__ == '__main__':
             all_results[key] += value
         all_results['num_imgs_per_tar'] += [len(result['height'])]
 
-    print(results)
-    print(all_results)
     print(all_results['ocr_caption'][0])
+   
     for key in all_results.keys():
         vals = all_results[key]
-        if isinstance(vals[0], str):
+        if isinstance(vals[0], str) or isinstance(vals[0], list):
             continue
         fig = plt.figure()
         plt.boxplot(all_results[key])
@@ -133,4 +134,13 @@ if __name__ == '__main__':
         logging.info(f"Min of {key}: {np.min(all_results[key])}")
         logging.info(f"Max of {key}: {np.max(all_results[key])}")
 
-    
+     # make word cloud aggregating the words in  all_results['ocr_lines']
+    all_ocr_lines = []
+    for ocr_lines in all_results['ocr_lines']:
+        all_ocr_lines += ocr_lines
+    wordcloud = WordCloud(width=800, height=400).generate(' '.join(all_ocr_lines))
+    plt.figure(figsize=(20,10))
+    plt.imshow(wordcloud, interpolation='bilinear')
+    plt.axis("off")
+    plt.savefig(os.path.join(args.logdir, 'wordcloud.png'))
+    plt.close()
