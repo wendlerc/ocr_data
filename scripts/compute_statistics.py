@@ -11,14 +11,16 @@ from collections import defaultdict
 import logging
 from matplotlib import pyplot as plt
 from wordcloud import WordCloud
+import pandas as pd
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process tar files in a directory')
-    parser.add_argument('--max_tars', type=int, required=True, help='Max number of tar files to process (integer)')
+    parser.add_argument('--max_files', type=int, required=True, help='Max number of tar files to process (integer)')
     parser.add_argument('--log_level', type=str, default='INFO', help='Log level (string)')
     parser.add_argument('--total_workers', type=int, required=True, help='Total number of workers (integer)')
     parser.add_argument('--path', type=str, default='/p/fastdata/mmlaion/ocr/RenderedText/', help='path')
     parser.add_argument('--logdir', type=str, default='./log/', help='output path for logs and results')
+    parser.add_argument('--type', type=str, default="tar", help='tar or parquet')
     return parser.parse_args()
 
 def bbox2str(bbox):
@@ -39,7 +41,31 @@ def ocr_caption(json_content, ocr_key):
     return ocr_caption
             
 def work_parquet(parquet_name):
-    raise NotImplementedError
+    # do the same thing as work_tar but for parquet files
+    statistics = defaultdict(list)
+    # open parquet file
+    df = pd.read_parquet(parquet_name)
+    if 'ocr_annotation' in df.columns:
+        ocr_key = 'ocr_annotation'
+    elif 'ocr_result' in df.columns:
+        ocr_key = 'ocr_result'
+    else:
+        ocr_key = None
+
+    # iterate over rows
+    for idx, row in tqdm(df.iterrows()):
+        statistics['height'] += [row['height']]
+        statistics['width'] += [row['width']]
+        # check if ocr_annotation is present
+        if ocr_key is not None:
+            statistics['num_ocr_lines'] += [len(row[ocr_key]['text'])]
+            statistics['ocr_lines'] += [row[ocr_key]['text'].tolist()]
+            statistics['ocr_caption'] += [ocr_caption(row, ocr_key)]
+            statistics['len_ocr_caption'] += [len(statistics['ocr_caption'][-1])]
+        # check if caption is present
+        if 'caption' in row:
+            statistics['len_caption'] += [len(row['caption'])]
+    return statistics
 
 def work_tar(tar_name):
     statistics = defaultdict(list)
@@ -101,16 +127,19 @@ if __name__ == '__main__':
     tar_files = []
     for root, dirs, files in os.walk(args.path):
         for file in files:
-            if len(tar_files) >= args.max_tars:
+            if len(tar_files) >= args.max_files:
                 break
-            if file.endswith('.tar'):
+            if file.endswith('.'+args.type):
                 tar_files += [os.path.join(root, file)]
             
 
     logging.info(f"Processing tar files: {len(tar_files)}")
 
     n = len(tar_files)
-    results = p_map(work_tar, tar_files, num_cpus=args.total_workers)
+    if args.type == 'tar':
+        results = p_map(work_tar, tar_files, num_cpus=args.total_workers)
+    elif args.type == 'parquet':
+        results = p_map(work_parquet, tar_files, num_cpus=args.total_workers)
 
     all_results = defaultdict(list)
     for result in results:
@@ -122,7 +151,7 @@ if __name__ == '__main__':
    
     for key in all_results.keys():
         vals = all_results[key]
-        if isinstance(vals[0], str) or isinstance(vals[0], list):
+        if not (isinstance(vals[0], int) or isinstance(vals[0], float)):
             continue
         fig = plt.figure()
         plt.boxplot(all_results[key])
@@ -135,6 +164,7 @@ if __name__ == '__main__':
         logging.info(f"Max of {key}: {np.max(all_results[key])}")
 
      # make word cloud aggregating the words in  all_results['ocr_lines']
+    print(all_results['ocr_lines'])
     all_ocr_lines = []
     for ocr_lines in all_results['ocr_lines']:
         all_ocr_lines += ocr_lines

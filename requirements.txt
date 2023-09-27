@@ -1,0 +1,7 @@
+numpy
+pandas
+matplotlib
+wordcloud
+p_tqdm
+tqdm
+pyarrow
