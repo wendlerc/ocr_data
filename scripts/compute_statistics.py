@@ -166,9 +166,14 @@ if __name__ == '__main__':
 
     n = len(tar_files)
     if args.type == 'tar':
-        results = p_map(work_tar, tar_files, num_cpus=args.total_workers)
+        work = work_tar
     elif args.type == 'parquet':
-        results = p_map(work_parquet, tar_files, num_cpus=args.total_workers)
+        work = work_parquet
+
+    if args.total_workers > 0:
+        results = p_map(work, tar_files, num_cpus=args.total_workers)
+    else:
+        results = p_map(work, tar_files)
     
     aggregate_result = {'total_number_of_imgs':0}
     all_results = defaultdict(list)
