@@ -7,10 +7,10 @@ import numpy as np
 from p_tqdm import p_map
 import os
 from tqdm import tqdm
-from collections import defaultdict
+from collections import defaultdict, Counter
 import logging
 from matplotlib import pyplot as plt
-from wordcloud import WordCloud
+from wordcloud import WordCloud, STOPWORDS
 import pandas as pd
 
 def parse_arguments():
@@ -22,6 +22,7 @@ def parse_arguments():
     parser.add_argument('--logdir', type=str, default='./log/', help='output path for logs and results')
     parser.add_argument('--type', type=str, default="tar", help='tar or parquet')
     parser.add_argument('--save_dict', action='store_true', help='save result dict')
+    parser.add_argument('--wc_remove_numbers', action='store_true', help='remove numbers from wordcloud')
     return parser.parse_args()
 
 def bbox2str(bbox):
@@ -40,6 +41,20 @@ def ocr_caption(json_content, ocr_key):
         ocr_caption += bbox2str(bbox) + ': ' + text + '\n' 
     ocr_caption += '</ocr>' 
     return ocr_caption
+
+def gpt4_process_text(text, remove_numbers=False):
+    # Convert to lowercase
+    text = text.lower()
+    # Remove punctuation
+    if remove_numbers:
+        text = ''.join(ch for ch in text if ch.isalpha() or ch.isspace())
+    else:
+        text = ''.join(ch for ch in text if ch.isalnum() or ch.isspace())
+    # Tokenize
+    words = text.split()
+    # Remove stopwords
+    words = [word for word in words if word not in STOPWORDS]
+    return ' '.join(words)
             
 def work_parquet(parquet_name):
     # do the same thing as work_tar but for parquet files
@@ -155,7 +170,7 @@ if __name__ == '__main__':
         if not (isinstance(vals[0], int) or isinstance(vals[0], float)):
             continue
         fig = plt.figure()
-        plt.boxplot(all_results[key])
+        plt.boxplot(all_results[key], showfliers=False)
         plt.title(f"Boxplot for {key}")
         plt.savefig(os.path.join(args.logdir, f'boxplot_{key}.png'))
         plt.close(fig)
@@ -173,19 +188,57 @@ if __name__ == '__main__':
     all_words = all_strings.split(' ')
     #remove leading and trailing spaces
     all_words = [word.strip() for word in all_words]
-    #filter out every word that is of length 1
-    all_words_filtered = [word for word in all_words if len(word) > 1]
-    wordcloud = WordCloud(width=800, height=400).generate(' '.join(all_words_filtered))
+    # filter out every word that is of length 1
+    # all_words_filtered = [word for word in all_words if len(word) > 1]
+    all_words_filtered = gpt4_process_text(' '.join(all_words), args.wc_remove_numbers).split(' ')
+    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(' '.join(all_words_filtered))
     plt.figure(figsize=(20,10))
     plt.imshow(wordcloud, interpolation='bilinear')
     plt.axis("off")
     plt.savefig(os.path.join(args.logdir, 'wordcloud.png'))
     plt.close()
-    # Extract words from the WordCloud object
     words_in_wordcloud = list(wordcloud.words_.keys())
-    print(words_in_wordcloud)
     all_results['words_in_wordcloud'] = words_in_wordcloud
     all_results['words_in_wordcloud_freq'] = list(wordcloud.words_.values())
+    logging.info(words_in_wordcloud)
+
+
+
+    # creade word cloud for words without stemming
+    word_counts = Counter(all_words_filtered)
+    wordcloud = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(word_counts)
+    plt.figure(figsize=(20,10))
+    plt.imshow(wordcloud, interpolation='bilinear')
+    plt.axis("off")
+    plt.savefig(os.path.join(args.logdir, 'wordcloud_1grams.png'))
+    plt.close()
+    # create word cloud for 2-grams
+    bigrams = [" ".join(all_words_filtered[i:i+2]) for i in range(len(all_words_filtered)-1)]
+    bigram_counts = Counter(bigrams)
+    wordcloud = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(bigram_counts)
+    plt.figure(figsize=(20,10))
+    plt.imshow(wordcloud, interpolation='bilinear')
+    plt.axis("off")
+    plt.savefig(os.path.join(args.logdir, 'wordcloud_2grams.png'))
+    plt.close()
+    bigrams_in_wordcloud = list(wordcloud.words_.keys())
+    logging.info(bigrams_in_wordcloud)
+    all_results['bigrams_in_wordcloud'] = bigrams_in_wordcloud
+    all_results['bigrams_in_wordcloud'] = list(wordcloud.words_.values())
+    # create word cloud for 3-grams
+    trigrams = [" ".join(all_words_filtered[i:i+3]) for i in range(len(all_words_filtered)-2)]
+    trigram_counts = Counter(trigrams)
+    wordcloud = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(trigram_counts)
+    plt.figure(figsize=(20,10))
+    plt.imshow(wordcloud, interpolation='bilinear')
+    plt.axis("off")
+    plt.savefig(os.path.join(args.logdir, 'wordcloud_3grams.png'))
+    plt.close()
+    trigrams_in_wordcloud = list(wordcloud.words_.keys())
+    logging.info(trigrams_in_wordcloud)
+    all_results['trigrams_in_wordcloud'] = trigrams_in_wordcloud
+    all_results['trigrams_in_wordcloud'] = list(wordcloud.words_.values())
+    
     if args.save_dict:
         with open(os.path.join(args.logdir, 'results.json'), 'w') as f:
             json.dump(all_results, f)
