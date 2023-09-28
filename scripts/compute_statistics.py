@@ -17,7 +17,7 @@ import cloudpickle as cpickle
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process tar files in a directory')
-    parser.add_argument('--max_files', type=int, required=True, help='Max number of tar files to process (integer)')
+    parser.add_argument('--max_files', type=int, default=-1, help='Max number of tar files to process (integer)')
     parser.add_argument('--log_level', type=str, default='INFO', help='Log level (string)')
     parser.add_argument('--total_workers', type=int, required=True, help='Total number of workers (integer)')
     parser.add_argument('--path', type=str, default='/p/fastdata/mmlaion/ocr/RenderedText/', help='path')
@@ -156,7 +156,7 @@ if __name__ == '__main__':
     tar_files = []
     for root, dirs, files in os.walk(args.path):
         for file in files:
-            if len(tar_files) >= args.max_files:
+            if args.max_files > 0 and len(tar_files) >= args.max_files:
                 break
             if file.endswith('.'+args.type):
                 tar_files += [os.path.join(root, file)]
