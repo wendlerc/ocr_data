@@ -12,6 +12,8 @@ import logging
 from matplotlib import pyplot as plt
 from wordcloud import WordCloud, STOPWORDS
 import pandas as pd
+import cloudpickle as cpickle
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process tar files in a directory')
@@ -76,6 +78,12 @@ def work_parquet(parquet_name):
         if ocr_key is not None:
             statistics['num_ocr_lines'] += [len(row[ocr_key]['text'])]
             statistics['ocr_lines'] += [row[ocr_key]['text'].tolist()]
+            joined = ' '.join(statistics['ocr_lines'][-1])
+            num_words = len(joined.split(' '))
+            num_chars = len(joined) - statistics['num_ocr_lines'][-1] + 1
+            statistics['num_ocr_words'] += [num_words]
+            statistics['num_ocr_chars'] += [num_chars]
+
             statistics['ocr_caption'] += [ocr_caption(row, ocr_key)]
             statistics['len_ocr_caption'] += [len(statistics['ocr_caption'][-1])]
         # check if caption is present
@@ -122,6 +130,12 @@ def work_tar(tar_name):
                     if ocr_key is not None:
                         statistics['num_ocr_lines'] += [len(json_content[ocr_key]['text'])]
                         statistics['ocr_lines'] += [json_content[ocr_key]['text']]
+                        joined = ' '.join(statistics['ocr_lines'][-1])
+                        num_words = len(joined.split(' '))
+                        num_chars = len(joined) - statistics['num_ocr_lines'][-1] + 1
+                        statistics['num_ocr_words'] += [num_words]
+                        statistics['num_ocr_chars'] += [num_chars]
+
                         statistics['ocr_caption'] += [ocr_caption(json_content, ocr_key)]
                         statistics['len_ocr_caption'] += [len(statistics['ocr_caption'][-1])]
                     if 'caption' in json_content:
@@ -133,12 +147,12 @@ def work_tar(tar_name):
 
 if __name__ == '__main__':
     args = parse_arguments()
-    logging.basicConfig(level=args.log_level)
-
-    logging.info('Computing statistics over %s'%args.path)
     # create logdir if it does not exist already
     if not os.path.exists(args.logdir):
         os.makedirs(args.logdir)
+    logging.basicConfig(level=args.log_level, format='%(asctime)s - %(levelname)s - %(message)s', filename=os.path.join(args.logdir,'log.txt'))
+    logging.info('Computing statistics over %s'%args.path)
+    
     # create a list of tar files contained in args.path
     tar_files = []
     for root, dirs, files in os.walk(args.path):
@@ -163,8 +177,7 @@ if __name__ == '__main__':
             all_results[key] += value
         all_results['num_imgs_per_tar'] += [len(result['height'])]
 
-    print(all_results['ocr_caption'][0])
-   
+    aggregate_result = {}
     for key in all_results.keys():
         vals = all_results[key]
         if not (isinstance(vals[0], int) or isinstance(vals[0], float)):
@@ -178,6 +191,22 @@ if __name__ == '__main__':
         logging.info(f"Std of {key}: {np.std(all_results[key])}")
         logging.info(f"Min of {key}: {np.min(all_results[key])}")
         logging.info(f"Max of {key}: {np.max(all_results[key])}")
+        logging.info(f"Median of {key}: {np.median(all_results[key])}")
+        logging.info(f"25th percentile of {key}: {np.quantile(all_results[key], 0.25)}")
+        logging.info(f"75th percentile of {key}: {np.quantile(all_results[key], 0.75)}")
+        logging.info(f"Interquartile range of {key}: {np.quantile(all_results[key], 0.75) - np.quantile(all_results[key], 0.25)}")
+        logging.info(f"5th percentile of {key}: {np.quantile(all_results[key], 0.05)}")
+        logging.info(f"95th percentile of {key}: {np.quantile(all_results[key], 0.95)}")
+        aggregate_result[f"mean_{key}"] = float(np.mean(all_results[key]))
+        aggregate_result[f"std_{key}"] = float(np.std(all_results[key]))
+        aggregate_result[f"min_{key}"] = float(np.min(all_results[key]))
+        aggregate_result[f"max_{key}"] = float(np.max(all_results[key]))
+        aggregate_result[f"median_{key}"] = float(np.median(all_results[key]))
+        aggregate_result[f"q1_{key}"] = float(np.quantile(all_results[key], 0.25))
+        aggregate_result[f"q3_{key}"] = float(np.quantile(all_results[key], 0.75))
+        aggregate_result[f"iqr_{key}"] = float(aggregate_result[f"q3_{key}"] - aggregate_result[f"q1_{key}"])
+        aggregate_result[f"q05_{key}"] = float(np.quantile(all_results[key], 0.05))
+        aggregate_result[f"q95_{key}"] = float(np.quantile(all_results[key], 0.95))
 
     # make word cloud aggregating the words in  all_results['ocr_lines']
     #print(all_results['ocr_lines'])
@@ -201,10 +230,7 @@ if __name__ == '__main__':
     all_results['words_in_wordcloud'] = words_in_wordcloud
     all_results['words_in_wordcloud_freq'] = list(wordcloud.words_.values())
     logging.info(words_in_wordcloud)
-
-
-
-    # creade word cloud for words without stemming
+    # creae wordcloud for words with our preprocessing instead of the default one
     word_counts = Counter(all_words_filtered)
     wordcloud = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(word_counts)
     plt.figure(figsize=(20,10))
@@ -238,8 +264,15 @@ if __name__ == '__main__':
     logging.info(trigrams_in_wordcloud)
     all_results['trigrams_in_wordcloud'] = trigrams_in_wordcloud
     all_results['trigrams_in_wordcloud'] = list(wordcloud.words_.values())
-    
+
+    # use cloudpickle instead of json
+    #with open(os.path.join(args.logdir, 'results.cpkl'), 'wb') as f:
+    #    cpickle.dump(aggregate_result, f)
+
+    with open(os.path.join(args.logdir, 'results.json'), 'w') as f:
+        json.dump(aggregate_result, f)
+        
     if args.save_dict:
-        with open(os.path.join(args.logdir, 'results.json'), 'w') as f:
+        with open(os.path.join(args.logdir, 'all_results.json'), 'w') as f:
             json.dump(all_results, f)
     

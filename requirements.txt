@@ -5,3 +5,4 @@ wordcloud
 p_tqdm
 tqdm
 pyarrow
+cloudpickle
