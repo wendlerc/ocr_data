@@ -24,7 +24,6 @@ def parse_arguments():
     parser.add_argument('--logdir', type=str, default='./log/', help='output path for logs and results')
     parser.add_argument('--type', type=str, default="tar", help='tar or parquet')
     parser.add_argument('--save_dict', action='store_true', help='save result dict')
-    parser.add_argument('--wc_remove_numbers', action='store_true', help='remove numbers from wordcloud')
     return parser.parse_args()
 
 def bbox2str(bbox):
@@ -170,14 +169,17 @@ if __name__ == '__main__':
         results = p_map(work_tar, tar_files, num_cpus=args.total_workers)
     elif args.type == 'parquet':
         results = p_map(work_parquet, tar_files, num_cpus=args.total_workers)
-
+    
+    aggregate_result = {'total_number_of_imgs':0}
     all_results = defaultdict(list)
     for result in results:
         for key, value in result.items():
             all_results[key] += value
         all_results['num_imgs_per_tar'] += [len(result['height'])]
+        aggregate_result['total_number_of_imgs'] += len(result['height'])
+    logging.info(f"Total number of images: {aggregate_result['total_number_of_imgs']}")
+        
 
-    aggregate_result = {}
     for key in all_results.keys():
         vals = all_results[key]
         if not (isinstance(vals[0], int) or isinstance(vals[0], float)):
@@ -217,57 +219,43 @@ if __name__ == '__main__':
     all_words = all_strings.split(' ')
     #remove leading and trailing spaces
     all_words = [word.strip() for word in all_words]
-    # filter out every word that is of length 1
-    # all_words_filtered = [word for word in all_words if len(word) > 1]
-    all_words_filtered = gpt4_process_text(' '.join(all_words), args.wc_remove_numbers).split(' ')
-    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(' '.join(all_words_filtered))
+
+    # default wordcloud
+    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(' '.join(all_words))
     plt.figure(figsize=(20,10))
     plt.imshow(wordcloud, interpolation='bilinear')
     plt.axis("off")
-    plt.savefig(os.path.join(args.logdir, 'wordcloud.png'))
+    plt.savefig(os.path.join(args.logdir, 'wordcloud_default.png'))
     plt.close()
     words_in_wordcloud = list(wordcloud.words_.keys())
     all_results['words_in_wordcloud'] = words_in_wordcloud
     all_results['words_in_wordcloud_freq'] = list(wordcloud.words_.values())
     logging.info(words_in_wordcloud)
-    # creae wordcloud for words with our preprocessing instead of the default one
-    word_counts = Counter(all_words_filtered)
-    wordcloud = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(word_counts)
-    plt.figure(figsize=(20,10))
-    plt.imshow(wordcloud, interpolation='bilinear')
-    plt.axis("off")
-    plt.savefig(os.path.join(args.logdir, 'wordcloud_1grams.png'))
-    plt.close()
-    # create word cloud for 2-grams
-    bigrams = [" ".join(all_words_filtered[i:i+2]) for i in range(len(all_words_filtered)-1)]
-    bigram_counts = Counter(bigrams)
-    wordcloud = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(bigram_counts)
-    plt.figure(figsize=(20,10))
-    plt.imshow(wordcloud, interpolation='bilinear')
-    plt.axis("off")
-    plt.savefig(os.path.join(args.logdir, 'wordcloud_2grams.png'))
-    plt.close()
-    bigrams_in_wordcloud = list(wordcloud.words_.keys())
-    logging.info(bigrams_in_wordcloud)
-    all_results['bigrams_in_wordcloud'] = bigrams_in_wordcloud
-    all_results['bigrams_in_wordcloud'] = list(wordcloud.words_.values())
-    # create word cloud for 3-grams
-    trigrams = [" ".join(all_words_filtered[i:i+3]) for i in range(len(all_words_filtered)-2)]
-    trigram_counts = Counter(trigrams)
-    wordcloud = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(trigram_counts)
-    plt.figure(figsize=(20,10))
-    plt.imshow(wordcloud, interpolation='bilinear')
-    plt.axis("off")
-    plt.savefig(os.path.join(args.logdir, 'wordcloud_3grams.png'))
-    plt.close()
-    trigrams_in_wordcloud = list(wordcloud.words_.keys())
-    logging.info(trigrams_in_wordcloud)
-    all_results['trigrams_in_wordcloud'] = trigrams_in_wordcloud
-    all_results['trigrams_in_wordcloud'] = list(wordcloud.words_.values())
 
-    # use cloudpickle instead of json
-    #with open(os.path.join(args.logdir, 'results.cpkl'), 'wb') as f:
-    #    cpickle.dump(aggregate_result, f)
+    # ngram wordclouds
+    def create_and_store_ngramwordcloud(n, words, fname, all_results, args):
+        ngrams = [" ".join(words[i:i+n]) for i in range(len(words)-n+1)]
+        ngram_counts = Counter(ngrams)
+        wordcloud = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(ngram_counts)
+        plt.figure(figsize=(20,10))
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.axis("off")
+        plt.savefig(os.path.join(args.logdir, fname))
+        plt.close()
+        ngrams_in_wordcloud = list(wordcloud.words_.keys())
+        logging.info(ngrams_in_wordcloud)
+        all_results[f'{n}grams_in_'+fname] = ngrams_in_wordcloud
+        all_results[f'{n}grams_freq_in_'+fname] = list(wordcloud.words_.values())
+    
+    all_words_and_numbers_processed = gpt4_process_text(' '.join(all_words), False).split(' ')
+    all_words_processed = gpt4_process_text(' '.join(all_words), True).split(' ')
+
+    create_and_store_ngramwordcloud(1, all_words_processed, 'wordcloud_1grams_processed.png', all_results, args)
+    create_and_store_ngramwordcloud(2, all_words_processed, 'wordcloud_2grams_processed.png', all_results, args)
+    create_and_store_ngramwordcloud(3, all_words_processed, 'wordcloud_3grams_processed.png', all_results, args)
+    create_and_store_ngramwordcloud(1, all_words_and_numbers_processed, 'wordcloud_1grams_and_numbers_processed.png', all_results, args)
+    create_and_store_ngramwordcloud(2, all_words_and_numbers_processed, 'wordcloud_2grams_and_numbers_processed.png', all_results, args)
+    create_and_store_ngramwordcloud(3, all_words_and_numbers_processed, 'wordcloud_3grams_and_numbers_processed.png', all_results, args)
 
     with open(os.path.join(args.logdir, 'results.json'), 'w') as f:
         json.dump(aggregate_result, f)
