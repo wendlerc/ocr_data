@@ -19,7 +19,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Process tar files in a directory')
     parser.add_argument('--max_files', type=int, default=-1, help='Max number of tar files to process (integer)')
     parser.add_argument('--log_level', type=str, default='INFO', help='Log level (string)')
-    parser.add_argument('--total_workers', type=int, required=True, help='Total number of workers (integer)')
+    parser.add_argument('--total_workers', type=int, default=-1, help='Total number of workers (integer)')
     parser.add_argument('--path', type=str, default='/p/fastdata/mmlaion/ocr/RenderedText/', help='path')
     parser.add_argument('--logdir', type=str, default='./log/', help='output path for logs and results')
     parser.add_argument('--type', type=str, default="tar", help='tar or parquet')
