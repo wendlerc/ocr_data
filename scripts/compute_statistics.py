@@ -102,14 +102,15 @@ def work_tar(tar_name):
             if file_data:
                 if tarinfo.name.lower().endswith('.json'):
                     json_files[tarinfo.name] = json.load(file_data)
-                elif tarinfo.name.lower().endswith(('.jpg', '.jpeg', '.png')):
-                    images[tarinfo.name] = file_data.read()
+                #elif tarinfo.name.lower().endswith(('.jpg', '.jpeg', '.png')):
+                #    images[tarinfo.name] = file_data.read()
         
+        for idx, (json_name, json_content) in tqdm(enumerate(json_files.items())):
         
-        for idx, (image_name, image_data) in tqdm(enumerate(images.items())):
-            img_ending = image_name.split('.')[-1]
-            json_name = image_name.replace(img_ending, 'json')
-            logging.debug('Processing image: ' + image_name)
+        #for idx, (image_name, image_data) in tqdm(enumerate(images.items())):
+        #    img_ending = image_name.split('.')[-1]
+        #    json_name = image_name.replace(img_ending, 'json')
+        #    logging.debug('Processing image: ' + image_name)
             logging.debug('Processing json: ' + json_name)
             if json_name in json_files:
                 json_content = json_files[json_name]
@@ -121,9 +122,9 @@ def work_tar(tar_name):
                     ocr_key = None
 
                 try:
-                    image = Image.open(io.BytesIO(image_data)).convert('RGB')
-                    width, height = image.size
-                    assert width == json_content['width'] and height == json_content['height'], 'json image dimensions missmatch with the loaded image'
+                    #image = Image.open(io.BytesIO(image_data)).convert('RGB')
+                    #width, height = image.size
+                    #assert width == json_content['width'] and height == json_content['height'], 'json image dimensions missmatch with the loaded image'
                     statistics['height'] += [json_content['height']]
                     statistics['width'] += [json_content['width']]
                     if ocr_key is not None:
